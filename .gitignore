@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Bengal POS — archivos que no se versionan
+# ---------------------------------------------------------------------------
+
+# --- Andamiaje local SDD / IA (no forma parte del producto) ---
+/.ai/
+/.opencode/
+/opencode.jsonc
+/scripts/
+/test-results/
+/INSTALL.md
+/CHANGELOG.md
+/gitignore.sdd-v3-1.snippet
+
+# --- Artefactos de compilación ---
+/bin/
+/dist/
+/vendor/
+*.test
+*.out
+
+# --- Variables de entorno y secretos locales ---
+.env
+.env.*
+!.env.example
+
+# --- Dependencias de frontend ---
+node_modules/
+
+# --- Ruido del sistema operativo ---
+.DS_Store
