@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -16,14 +17,30 @@ import (
 
 // Server wires HTTP handlers to the pos service.
 type Server struct {
-	svc *pos.Service
+	svc  *pos.Service
+	auth *authServer
 }
 
 // NewServer returns the complete API handler.
 func NewServer(svc *pos.Service) http.Handler {
-	s := &Server{svc: svc}
+	return newServer(svc, nil)
+}
+
+// newServer is the testable constructor. validate overrides the session
+// resolver only in transport tests; production always uses the service.
+func newServer(svc *pos.Service, validate func(context.Context, string) (*pos.UsuarioSesion, error)) http.Handler {
+	s := &Server{svc: svc, auth: newAuthServer(svc)}
+	if validate != nil {
+		s.auth.validate = validate
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
+	mux.HandleFunc("POST /api/auth/login", s.auth.login)
+	mux.HandleFunc("POST /api/auth/logout", s.auth.logout)
+	mux.HandleFunc("GET /api/auth/me", s.auth.me)
+	mux.HandleFunc("GET /api/usuarios", s.auth.listUsuarios)
+	mux.HandleFunc("POST /api/usuarios", s.auth.createUsuario)
+	mux.HandleFunc("PUT /api/usuarios/{id}", s.auth.updateUsuario)
 	mux.HandleFunc("POST /api/caja/apertura", s.openCaja)
 	mux.HandleFunc("POST /api/caja/cierre", s.closeCaja)
 	mux.HandleFunc("GET /api/caja/abierta", s.getOpenCaja)
@@ -73,11 +90,18 @@ func NewServer(svc *pos.Service) http.Handler {
 	mux.HandleFunc("GET /api/productos/{id}/receta", s.getReceta)
 	mux.HandleFunc("PUT /api/productos/{id}/receta", s.updateReceta)
 	mux.HandleFunc("GET /api/productos/{id}/costo-margen", s.getCostoMargen)
-	return mux
+	return s.auth.middleware(mux)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func actorID(r *http.Request) int64 {
+	if u := getUser(r); u != nil {
+		return u.ID
+	}
+	return 0
 }
 
 func (s *Server) openCaja(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +110,7 @@ func (s *Server) openCaja(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	caja, err := s.svc.OpenCaja(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -100,6 +125,7 @@ func (s *Server) closeCaja(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	result, err := s.svc.CloseCaja(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -114,6 +140,7 @@ func (s *Server) addCajaMovimiento(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	movimiento, err := s.svc.AddCajaMovimiento(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -128,6 +155,7 @@ func (s *Server) addCajaEntrada(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	in.Tipo = "entrada"
 	movimiento, err := s.svc.AddCajaMovimiento(r.Context(), in)
 	if err != nil {
@@ -143,6 +171,7 @@ func (s *Server) addCajaSalida(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	in.Tipo = "salida"
 	movimiento, err := s.svc.AddCajaMovimiento(r.Context(), in)
 	if err != nil {
@@ -190,6 +219,7 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	sale, err := s.svc.CreateSale(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -223,6 +253,7 @@ func (s *Server) addPaymentPart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	part, err := s.svc.AddPaymentPart(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -251,7 +282,7 @@ func (s *Server) confirmPaymentPart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	part, err := s.svc.ConfirmPaymentPart(r.Context(), ventaID, partID, in.UsuarioID)
+	part, err := s.svc.ConfirmPaymentPart(r.Context(), ventaID, partID, actorID(r))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -277,7 +308,7 @@ func (s *Server) completeSale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	completion, err := s.svc.CompleteSale(r.Context(), id, pos.CompleteSaleInput{
-		UsuarioID:              in.UsuarioID,
+		UsuarioID:              actorID(r),
 		IdempotencyKey:         strings.TrimSpace(r.Header.Get("Idempotency-Key")),
 		DepositoID:             in.DepositoID,
 		ConfirmarStockNegativo: in.ConfirmarStockNegativo,
@@ -318,7 +349,7 @@ func (s *Server) printComanda(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	doc, err := s.svc.PrintComanda(r.Context(), id, in.UsuarioID, r.URL.Query().Get("formato"))
+	doc, err := s.svc.PrintComanda(r.Context(), id, actorID(r), r.URL.Query().Get("formato"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -337,7 +368,7 @@ func (s *Server) printReceipt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	doc, err := s.svc.PrintReceipt(r.Context(), id, in.UsuarioID, r.URL.Query().Get("formato"))
+	doc, err := s.svc.PrintReceipt(r.Context(), id, actorID(r), r.URL.Query().Get("formato"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -382,6 +413,7 @@ func (s *Server) createArea(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	area, err := s.svc.CreateArea(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -401,6 +433,7 @@ func (s *Server) updateArea(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	area, err := s.svc.UpdateArea(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -420,6 +453,7 @@ func (s *Server) assignProductArea(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	product, err := s.svc.AssignProductArea(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -434,6 +468,7 @@ func (s *Server) createProducto(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	producto, err := s.svc.CreateProducto(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -481,6 +516,7 @@ func (s *Server) updateProducto(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	producto, err := s.svc.UpdateProducto(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -514,6 +550,7 @@ func (s *Server) addProductoProveedor(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	asociacion, err := s.svc.AsociarProductoProveedor(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -533,12 +570,7 @@ func (s *Server) removeProductoProveedor(w http.ResponseWriter, r *http.Request)
 		writeError(w, err)
 		return
 	}
-	usuarioID, err := deleteUsuarioID(w, r)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	if err := s.svc.RemoveProductoProveedor(r.Context(), id, proveedorID, usuarioID); err != nil {
+	if err := s.svc.RemoveProductoProveedor(r.Context(), id, proveedorID, actorID(r)); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -556,6 +588,7 @@ func (s *Server) addCostoCompra(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	costo, err := s.svc.RegistrarCostoCompra(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -603,6 +636,7 @@ func (s *Server) updateReceta(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	receta, err := s.svc.UpdateReceta(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -645,6 +679,7 @@ func (s *Server) createProveedor(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	proveedor, err := s.svc.CreateProveedor(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -664,6 +699,7 @@ func (s *Server) updateProveedor(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	proveedor, err := s.svc.UpdateProveedor(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -692,6 +728,7 @@ func (s *Server) createDeposito(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	deposito, err := s.svc.CreateDeposito(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -711,6 +748,7 @@ func (s *Server) updateDeposito(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	deposito, err := s.svc.UpdateDeposito(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
@@ -763,6 +801,7 @@ func (s *Server) addMovimiento(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	resultado, err := s.svc.AddMovimientoInventario(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -777,6 +816,7 @@ func (s *Server) transferirStock(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	in.UsuarioID = actorID(r)
 	resultado, err := s.svc.TransferirStock(r.Context(), in)
 	if err != nil {
 		writeError(w, err)
@@ -816,25 +856,6 @@ func queryInt64(r *http.Request, name string) (*int64, error) {
 		return nil, &pos.AppError{Code: "parametro_invalido", Message: "Parámetro inválido: " + name, Status: http.StatusBadRequest}
 	}
 	return &value, nil
-}
-
-// deleteUsuarioID reads the actor from ?usuario_id= or, when absent, from a
-// small JSON body. DELETE has no other payload.
-func deleteUsuarioID(w http.ResponseWriter, r *http.Request) (int64, error) {
-	if raw := strings.TrimSpace(r.URL.Query().Get("usuario_id")); raw != "" {
-		id, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil || id <= 0 {
-			return 0, &pos.AppError{Code: "parametro_invalido", Message: "Parámetro inválido: usuario_id", Status: http.StatusBadRequest}
-		}
-		return id, nil
-	}
-	var in struct {
-		UsuarioID int64 `json:"usuario_id"`
-	}
-	if err := decodeJSON(w, r, &in); err != nil {
-		return 0, err
-	}
-	return in.UsuarioID, nil
 }
 
 func pathID(r *http.Request, name string) (int64, error) {

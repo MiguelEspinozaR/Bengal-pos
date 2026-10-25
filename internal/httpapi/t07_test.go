@@ -10,7 +10,7 @@ import (
 // AC1/AC7/AC9: decimal quantities or amounts never reach the service. The
 // decoder rejects them before execution, which is safe with a nil service.
 func TestT07_DecimalNumbersRejectedAtBoundary(t *testing.T) {
-	handler := NewServer(nil)
+	handler := newTestServer(t, nil)
 	cases := []struct {
 		method string
 		path   string
@@ -38,7 +38,7 @@ func TestT07_DecimalNumbersRejectedAtBoundary(t *testing.T) {
 
 // Query filters must be positive integers before hitting the database.
 func TestT07_StockQueryValidation(t *testing.T) {
-	handler := NewServer(nil)
+	handler := newTestServer(t, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/inventario/stock?producto_id=abc", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

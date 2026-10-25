@@ -83,6 +83,32 @@ var (
 	ErrMotivoAjusteRequerido    = appError("motivo_ajuste_requerido", "El motivo del ajuste es obligatorio", 422)
 	ErrTrasladoMismoDeposito    = appError("traslado_deposito_invalido", "El depósito de origen y destino deben ser distintos", 422)
 
+	// T-09 authentication, single-role users and logical deactivation
+	// (RF-09..RF-12, RNF-02, US-01).
+	ErrCredencialesInvalidas  = appError("credenciales_invalidas", "Credenciales inválidas", 401)
+	ErrNoAutenticado          = appError("no_autenticado", "Debe iniciar sesión", 401)
+	ErrLoginRequerido         = appError("login_requerido", "El login es obligatorio", 422)
+	ErrLoginDuplicado         = appError("login_duplicado", "El login ya existe", 409)
+	ErrNombreUsuarioRequerido = appError("nombre_usuario_requerido",
+		"El nombre completo es obligatorio", 422)
+	ErrRolInvalido = appError("rol_invalido",
+		"El rol debe ser administrador, encargado o empleado", 422)
+	ErrRolNoPermitido = appError("rol_no_permitido",
+		"No autorizado para asignar ese rol", 403)
+	ErrPasswordLongitud = appError("password_longitud_invalida",
+		"La contraseña debe tener entre 8 y 72 caracteres", 422)
+	ErrPasswordDebil = appError("password_debil",
+		"La contraseña debe incluir al menos una letra y un dígito", 422)
+	ErrUsuarioNoExiste = appError("usuario_no_encontrado", "El usuario no existe", 404)
+	ErrRolInmutable    = appError("rol_inmutable",
+		"No se permite cambiar el rol del usuario", 422)
+	ErrAutoDesactivacion = appError("auto_desactivacion",
+		"No puede desactivar su propio usuario", 409)
+	ErrUltimoDueno = appError("ultimo_dueno",
+		"Debe existir al menos un dueño activo", 409)
+	ErrBootstrapRequerido = appError("bootstrap_requerido",
+		"Configure ADMIN_INICIAL_LOGIN, ADMIN_INICIAL_PASSWORD y ADMIN_INICIAL_NOMBRE para crear el primer dueño", 500)
+
 	// T-08 purchase costs, recipes and margin (RF-27..RF-30, RT-01).
 	ErrCostoInvalido             = appError("costo_invalido", "El costo debe ser un entero mayor o igual a cero", 422)
 	ErrCostoFechaInvalida        = appError("costo_fecha_invalida", "La fecha del costo debe tener el formato AAAA-MM-DD", 422)

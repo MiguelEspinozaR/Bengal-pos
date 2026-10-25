@@ -530,3 +530,61 @@ type CostoMargen struct {
 	CostoCompleto        bool                  `json:"costo_completo"`
 	IngredientesSinCosto []IngredienteSinCosto `json:"ingredientes_sin_costo"`
 }
+
+// UsuarioSesion is the authenticated identity returned by login and /me. It
+// never contains the password hash or session token (RNF-02).
+type UsuarioSesion struct {
+	ID             int64  `json:"id"`
+	NombreCompleto string `json:"nombre_completo"`
+	Login          string `json:"login"`
+	Rol            string `json:"rol"`
+}
+
+// Usuario is an administration listing row without password_hash.
+type Usuario struct {
+	ID             int64     `json:"id"`
+	NombreCompleto string    `json:"nombre_completo"`
+	Login          string    `json:"login"`
+	Rol            string    `json:"rol"`
+	Activo         bool      `json:"activo"`
+	CreadoEn       time.Time `json:"creado_en"`
+	ActualizadoEn  time.Time `json:"actualizado_en"`
+}
+
+// CreateUsuarioInput registers a user with an immutable role (RF-09/RF-10).
+// UsuarioID is the authenticated actor and is always overwritten by the HTTP
+// transport from the server-side session.
+type CreateUsuarioInput struct {
+	UsuarioID      int64  `json:"usuario_id"`
+	NombreCompleto string `json:"nombre_completo"`
+	Login          string `json:"login"`
+	Password       string `json:"password"`
+	Rol            string `json:"rol"`
+}
+
+// UpdateUsuarioInput edits the name, activates/deactivates or resets the
+// password. Rol is accepted only to produce an explicit immutability error.
+type UpdateUsuarioInput struct {
+	UsuarioID      int64   `json:"usuario_id"`
+	NombreCompleto *string `json:"nombre_completo"`
+	Activo         *bool   `json:"activo"`
+	Password       *string `json:"password"`
+	Rol            *string `json:"rol"`
+}
+
+// LoginResult carries the public identity plus the raw token and expiry that
+// the HTTP layer turns into the session cookie. The raw token is never logged
+// or persisted; only its SHA-256 hash is stored.
+type LoginResult struct {
+	Usuario  UsuarioSesion
+	Token    string
+	ExpiraEn time.Time
+}
+
+// BootstrapConfig is the environment-provided first owner. It is used only
+// when the usuarios table is empty (AC8).
+type BootstrapConfig struct {
+	Login    string
+	Password string
+	Nombre   string
+}

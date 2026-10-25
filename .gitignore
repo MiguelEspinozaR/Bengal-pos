@@ -14,7 +14,7 @@
 
 # --- Artefactos de compilación ---
 /bin/
-/dist/
+dist/
 /vendor/
 *.test
 *.out

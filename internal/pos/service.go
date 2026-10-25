@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,14 +15,41 @@ import (
 	"bengalpos/internal/domain"
 )
 
-// Service is the application boundary used by the HTTP transport.
-type Service struct {
-	pool *pgxpool.Pool
+// DefaultSessionTTL is the absolute, non-sliding lifetime of a server-side
+// session (12 hours covers a long shift).
+const DefaultSessionTTL = 12 * time.Hour
+
+// Config carries the authentication settings chosen at startup.
+type Config struct {
+	SessionTTL time.Duration
 }
 
-// NewService builds a sales/cash service around a pgx pool.
+// Service is the application boundary used by the HTTP transport.
+type Service struct {
+	pool       *pgxpool.Pool
+	sessionTTL time.Duration
+}
+
+// NewService builds a sales/cash service around a pgx pool with defaults.
 func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool}
+	return NewServiceWithConfig(pool, Config{})
+}
+
+// NewServiceWithConfig builds a service with explicit authentication settings.
+func NewServiceWithConfig(pool *pgxpool.Pool, cfg Config) *Service {
+	ttl := cfg.SessionTTL
+	if ttl <= 0 {
+		ttl = DefaultSessionTTL
+	}
+	return &Service{pool: pool, sessionTTL: ttl}
+}
+
+// SessionTTL returns the configured absolute session lifetime.
+func (s *Service) SessionTTL() time.Duration {
+	if s.sessionTTL <= 0 {
+		return DefaultSessionTTL
+	}
+	return s.sessionTTL
 }
 
 type dbQuerier interface {

@@ -13,7 +13,7 @@ import (
 // before the use case runs, so a nil service is safe here and proves the tip
 // never reaches persistence.
 func TestCreateSaleRejectsTipFields(t *testing.T) {
-	handler := NewServer(nil)
+	handler := newTestServer(t, nil)
 	for _, body := range []string{
 		`{"usuario_id":1,"items":[{"producto_id":1,"cantidad":1}],"propina_bs":500}`,
 		`{"usuario_id":1,"items":[{"producto_id":1,"cantidad":1}],"propina":500}`,

@@ -10,7 +10,7 @@ import (
 // T-08/RT-01: cost amounts and recipe quantities are integers at the JSON
 // boundary; decimals are rejected before reaching the service.
 func TestT08_DecimalNumbersRejectedAtBoundary(t *testing.T) {
-	handler := NewServer(nil)
+	handler := newTestServer(t, nil)
 	cases := []struct {
 		method string
 		path   string
@@ -40,7 +40,7 @@ func TestT08_DecimalNumbersRejectedAtBoundary(t *testing.T) {
 // T-08: the new single-resource paths are mounted. An invalid path id is
 // rejected before any service call, so this works with a nil service.
 func TestT08_RoutesMounted(t *testing.T) {
-	handler := NewServer(nil)
+	handler := newTestServer(t, nil)
 	for _, tc := range []struct {
 		method string
 		path   string

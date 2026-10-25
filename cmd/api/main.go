@@ -37,13 +37,23 @@ func main() {
 	}
 	log.Printf("migrations applied: %d", applied)
 
+	svc := pos.NewServiceWithConfig(pool, pos.Config{SessionTTL: httpapi.LoadSessionTTL()})
+	if err := svc.BootstrapOwner(ctx, pos.BootstrapConfig{
+		Login:    os.Getenv("ADMIN_INICIAL_LOGIN"),
+		Password: os.Getenv("ADMIN_INICIAL_PASSWORD"),
+		Nombre:   os.Getenv("ADMIN_INICIAL_NOMBRE"),
+	}); err != nil {
+		// The error never contains the password or its hash.
+		log.Fatalf("bootstrap del primer dueño: %v", err)
+	}
+
 	addr := os.Getenv("ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.NewServer(pos.NewService(pool)),
+		Handler:           httpapi.NewServer(svc),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
