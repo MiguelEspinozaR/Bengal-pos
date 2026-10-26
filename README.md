@@ -1,51 +1,124 @@
 # Bengal POS
 
-Punto de venta para administrar una repostería (adaptable a restaurantes y negocios similares): inventario, proveedores, caja con cuadre, ventas con pagos divididos, comandas por área, costos y reportes.
+Sistema de Punto de Venta (POS) para reposterías, restaurantes y negocios similares. Desarrollado con Go + React + TypeScript + PostgreSQL.
 
-## Estado
+## Estado del proyecto
 
-| Fase | Estado |
-|---|---|
-| Especificación v1.0 (resuelta, sin preguntas abiertas) | ✅ `docs/specs-v1.md` |
-| Arquitectura y modelo de datos | ✅ `docs/arquitectura.md` |
-| Reglas de negocio | ✅ `docs/reglas-de-negocio.md` |
-| Módulo de ventas y pagos divididos (API Go) | 🚧 en curso |
-| Módulo de comandas por área | pendiente |
-| Caja, inventario, usuarios, reportes, UI React | pendiente |
+| Hito | Estado | Descripción |
+|---|---|---|
+| **M1** | ✅ Completado | Ventas con pagos divididos, comandas por área, harness de integración |
+| **M2** | ✅ Completado | Caja completa, inventario, proveedores, costos y recetas |
+| **M3** | ✅ Completado | Autenticación por sesión, gestión de usuarios, UI React de venta |
+| **M4** | 🚧 Pendiente de push | Reportes + exportación CSV/PDF |
 
-## Decisiones clave de la v1
+## Características
 
-- **Stack**: Go (API), React + TypeScript (UI responsive), PostgreSQL.
-- **Una sola moneda**: boliviano (Bs), montos en unidad mínima entera (sin decimales flotantes).
-- **Historial inmutable**: los movimientos de inventario, caja y auditoría nunca se editan ni se borran; las correcciones se registran como asientos compensadores (solo administrador/dueño).
-- **Pagos divididos**: una venta puede pagarse en varias partes (efectivo, tarjeta, QR), cada parte se confirma manualmente; no hay propinas.
-- **Cobro en efectivo**: exige una caja abierta; calcula el cambio.
-- **Inventario**: al vender se descuenta solo el producto terminado; las recetas se usan para costo y margen.
-- **Comandas por área**: cada producto define su área de preparación (cocina, pastelería, …); se imprime un ticket por área.
-- **Respaldo**: base de datos local (en el negocio, por LAN) con réplica remota sincronizada; la venta sigue funcionando sin internet.
+### Ventas
+- Ventas con uno o múltiples ítems
+- Pagos divididos (efectivo, tarjeta, QR) con confirmación manual
+- Cálculo de cambio en efectivo
+- Descuento automático de inventario al completar venta
+- Validación de stock negativo con confirmación
+- Impresión de comandas por área y recibo
 
-## Estructura
+### Caja
+- Apertura/cierre de caja con cuadre
+- Entradas y salidas de efectivo con motivo
+- Historial de sesiones inmutable
+- Control de ventas en proceso al cerrar
 
-```
-docs/         Especificación, arquitectura y reglas de negocio
-cmd/api/      Servidor API (Go)
-internal/     Lógica de dominio, persistencia e HTTP
-migrations/   Migraciones SQL (PostgreSQL)
-```
+### Inventario
+- Gestión de productos, depósitos y stock por ubicación
+- Movimientos de inventario inmutables (entradas/salidas/ajustes/traslados)
+- Alertas de bajo stock agrupadas por proveedor
+- Gestión de proveedores
+- Recetas con cálculo automático de costo y margen
 
-## Desarrollo
+### Usuarios y autenticación
+- Roles: Dueño, Administrador, Encargado de área, Empleado
+- Autenticación por sesión (cookie HttpOnly)
+- Control de acceso basado en roles
+- Baja lógica de usuarios con historial intacto
 
-Requisitos: Go 1.26+, PostgreSQL 18+.
+### Reportes
+- Ventas por periodo, producto, empleado y método de pago
+- Inventario (stock actual, bajo mínimo, movimientos)
+- Caja por turno/sesión
+- Asistencia y pagos del personal
+- Exportación CSV y PDF
 
+## Stack Tecnológico
+
+- **Backend:** Go 1.26+ con net/http
+- **Frontend:** React 18 + TypeScript + Vite
+- **Base de datos:** PostgreSQL 18
+- **Autenticación:** Sesiones con cookies HttpOnly (bcrypt + SHA-256)
+- **Testing:** Go testing + Vitest + Testing Library
+
+## Instalación
+
+### Requisitos
+- Go 1.26 o superior
+- Node.js 22 o superior
+- PostgreSQL 18 o superior
+
+### Configuración
+
+1. Clonar el repositorio:
 ```bash
-go build ./...
-go test ./...
+git clone git@github.com:MiguelEspinozaR/Bengal-pos.git
+cd Bengal-pos
 ```
 
-Los tests de integración se activan automáticamente con la variable `DATABASE_URL` (base de desarrollo); sin ella se ejecutan solo los tests unitarios.
+2. Configurar base de datos PostgreSQL
+
+3. Crear archivo `.env` (opcional):
+```env
+DATABASE_URL=postgres://usuario:password@localhost:5432/bengalpos?sslmode=disable
+SESSION_COOKIE_SECURE=false
+ADMIN_INICIAL_LOGIN=admin
+ADMIN_INICIAL_PASSWORD=changeme
+ADMIN_INICIAL_NOMBRE=Administrador
+```
+
+4. Instalar dependencias:
+```bash
+go mod download
+npm install
+```
+
+### Desarrollo
+
+**Backend:**
+```bash
+go run ./cmd/api
+```
+
+**Frontend:**
+```bash
+npm run dev
+```
+
+**Tests:**
+```bash
+go test ./...
+npm test
+```
+
+## Arquitectura
+
+- **Modo offline-ready:** Base de datos local en el negocio con posibilidad de replicación
+- **Historial inmutable:** Todos los movimientos se registran como insert-only
+- **Transaccionalidad:** Las ventas se procesan en transacciones atómicas
+- **Moneda:** Boliviano (Bs) en unidad mínima entera
+- **Sin hardware obligatorio:** Impresión desde navegador
 
 ## Documentación
 
-- [`docs/specs-v1.md`](docs/specs-v1.md) — especificación funcional resuelta (roles, RF/RNF, criterios de aceptación).
-- [`docs/arquitectura.md`](docs/arquitectura.md) — componentes, modelo de datos, invariantes y transacciones.
-- [`docs/reglas-de-negocio.md`](docs/reglas-de-negocio.md) — reglas validables con sus mensajes exactos.
+- [`docs/specs-v1.md`](docs/specs-v1.md) - Especificación funcional v1.0
+- [`docs/arquitectura.md`](docs/arquitectura.md) - Arquitectura y modelo de datos
+- [`docs/reglas-de-negocio.md`](docs/reglas-de-negocio.md) - Reglas de negocio validadas
+
+## Licencia
+
+Proyecto privado - Todos los derechos reservados

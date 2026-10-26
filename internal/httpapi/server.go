@@ -90,6 +90,13 @@ func newServer(svc *pos.Service, validate func(context.Context, string) (*pos.Us
 	mux.HandleFunc("GET /api/productos/{id}/receta", s.getReceta)
 	mux.HandleFunc("PUT /api/productos/{id}/receta", s.updateReceta)
 	mux.HandleFunc("GET /api/productos/{id}/costo-margen", s.getCostoMargen)
+
+	// T-11: reportes + export CSV/PDF (RF-35..RF-39).
+	mux.HandleFunc("GET /api/reportes/ventas", s.getReporteVentas)
+	mux.HandleFunc("GET /api/reportes/inventario", s.getReporteInventario)
+	mux.HandleFunc("GET /api/reportes/caja", s.getReporteCaja)
+	mux.HandleFunc("GET /api/reportes/personal", s.getReportePersonal)
+	mux.HandleFunc("GET /api/reportes/{tipo}/export", s.exportReporte)
 	return s.auth.middleware(mux)
 }
 
