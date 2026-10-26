@@ -105,6 +105,14 @@ export function apiPost<T>(
   return apiRequest<T>(path, { method: 'POST', body, headers })
 }
 
+export function apiPut<T>(
+  path: string,
+  body: unknown = {},
+  headers?: Record<string, string>,
+): Promise<T> {
+  return apiRequest<T>(path, { method: 'PUT', body, headers })
+}
+
 /** Fetch a print-ready HTML document (the API returns text/html directly). */
 export async function apiPrintHtml(path: string): Promise<string> {
   let response: Response
