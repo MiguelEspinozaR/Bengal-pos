@@ -35,9 +35,11 @@ export function PaymentPanel({
   onComplete,
 }: PaymentPanelProps) {
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo')
-  const [monto, setMonto] = useState('')
   const [recibido, setRecibido] = useState('')
-  const [referencia, setReferencia] = useState('')
+  const [metodoSec, setMetodoSec] = useState<MetodoPago>('qr')
+  const [montoSec, setMontoSec] = useState('')
+  const [recibidoSec, setRecibidoSec] = useState('')
+  const [showSecondary, setShowSecondary] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
 
   const confirmedTotal = parts
@@ -46,21 +48,11 @@ export function PaymentPanel({
   const allConfirmed = parts.length > 0 && parts.every((part) => part.estado === 'confirmado')
   const sumMatches = confirmedTotal === sale.total_bs
   const canComplete = allConfirmed && sumMatches && busy === null
+  const missing = sale.total_bs - confirmedTotal
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setLocalError(null)
-    let montoBs: number
-    try {
-      montoBs = parseBs(monto)
-    } catch {
-      setLocalError('Ingrese un monto válido en Bs (máximo dos decimales).')
-      return
-    }
-    if (montoBs <= 0) {
-      setLocalError('El monto debe ser mayor que cero.')
-      return
-    }
 
     let recibidoBs: number | undefined
     if (metodo === 'efectivo') {
@@ -70,109 +62,141 @@ export function PaymentPanel({
         setLocalError('Ingrese el efectivo recibido en Bs.')
         return
       }
-      if (recibidoBs < montoBs) {
-        setLocalError('El efectivo recibido es menor que el monto en efectivo a pagar.')
+      if (recibidoBs < sale.total_bs) {
+        setLocalError('El efectivo recibido es menor que el total a pagar.')
         return
       }
     }
 
     await onAddPart({
       metodo,
-      monto_bs: montoBs,
+      monto_bs: sale.total_bs,
       recibido_bs: recibidoBs,
-      referencia: referencia.trim() === '' ? undefined : referencia.trim(),
     })
-    setMonto('')
     setRecibido('')
-    setReferencia('')
   }
 
-  const missing = sale.total_bs - confirmedTotal
+  const handleAddSecondary = async (event: FormEvent) => {
+    event.preventDefault()
+    setLocalError(null)
+    if (missing <= 0) {
+      setLocalError('Ya no falta por pagar.')
+      return
+    }
+    let montoBs: number
+    try {
+      montoBs = parseBs(montoSec)
+    } catch {
+      setLocalError('Ingrese un monto válido en Bs.')
+      return
+    }
+    if (montoBs <= 0 || montoBs > missing) {
+      setLocalError('El monto debe ser mayor que cero y no exceder lo que falta por pagar.')
+      return
+    }
+
+    let recibidoBsSec: number | undefined
+    if (metodoSec === 'efectivo') {
+      try {
+        recibidoBsSec = parseBs(recibidoSec)
+      } catch {
+        setLocalError('Ingrese el efectivo recibido para el segundo método.')
+        return
+      }
+      if (recibidoBsSec < montoBs) {
+        setLocalError('El efectivo recibido es menor que el monto a cubrir.')
+        return
+      }
+    }
+
+    await onAddPart({
+      metodo: metodoSec,
+      monto_bs: montoBs,
+      recibido_bs: recibidoBsSec,
+    })
+    setMontoSec('')
+    setRecibidoSec('')
+  }
+
+  const startSecondary = () => {
+    setShowSecondary(true)
+    setMontoSec(formatBs(missing).replace('Bs ', '').replace(',', '.'))
+  }
+
+  const cambio = metodo === 'efectivo' && recibido ? Math.max(0, parseBsSafe(recibido) - sale.total_bs) : 0
 
   return (
     <section className="payment-panel" aria-label="Cobro y pagos">
       <div className="panel-heading">
         <h2>Cobro de la venta #{sale.id}</h2>
-        <span className="badge">Total {formatBs(sale.total_bs)}</span>
+        <span className="badge">Total a pagar {formatBs(sale.total_bs)}</span>
       </div>
 
-      <form className="payment-form" onSubmit={(event) => void handleSubmit(event)}>
-        <div className="field">
-          <label htmlFor="metodo-pago">Método de pago</label>
-          <select
-            id="metodo-pago"
-            value={metodo}
-            onChange={(event) => setMetodo(event.target.value as MetodoPago)}
-          >
-            <option value="efectivo">Efectivo</option>
-            <option value="tarjeta">Tarjeta</option>
-            <option value="qr">QR</option>
-          </select>
-        </div>
-
-        <div className="field">
-          <label htmlFor="monto-parte">Monto de la parte (Bs)</label>
-          <input
-            id="monto-parte"
-            inputMode="decimal"
-            autoComplete="off"
-            value={monto}
-            onChange={(event) => setMonto(event.target.value)}
-            placeholder="0,00"
-          />
-        </div>
-
-        {metodo === 'efectivo' ? (
+      {parts.length === 0 ? (
+        <form className="payment-form" onSubmit={(event) => void handleSubmit(event)}>
           <div className="field">
-            <label htmlFor="recibido-efectivo">Efectivo recibido (Bs)</label>
-            <input
-              id="recibido-efectivo"
-              inputMode="decimal"
-              autoComplete="off"
-              value={recibido}
-              onChange={(event) => setRecibido(event.target.value)}
-              placeholder="0,00"
-            />
+            <label htmlFor="metodo-pago">Método de pago</label>
+            <select
+              id="metodo-pago"
+              value={metodo}
+              onChange={(event) => setMetodo(event.target.value as MetodoPago)}
+            >
+              <option value="efectivo">Efectivo</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="qr">QR</option>
+            </select>
           </div>
-        ) : null}
 
-        <div className="field">
-          <label htmlFor="referencia-pago">Referencia (opcional)</label>
-          <input
-            id="referencia-pago"
-            autoComplete="off"
-            value={referencia}
-            onChange={(event) => setReferencia(event.target.value)}
-          />
-        </div>
+          {metodo === 'efectivo' ? (
+            <>
+              <div className="field">
+                <label htmlFor="efectivo-recibido">Efectivo recibido (Bs)</label>
+                <input
+                  id="efectivo-recibido"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={recibido}
+                  onChange={(event) => setRecibido(event.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+              {recibido ? (
+                <div className="total-row">
+                  <span>Cambio</span>
+                  <strong>{formatBs(cambio)}</strong>
+                </div>
+              ) : null}
+            </>
+          ) : null}
 
-        {localError ? (
-          <p className="form-error" role="alert">
-            {localError}
-          </p>
-        ) : null}
+          {localError ? (
+            <p className="form-error" role="alert">
+              {localError}
+            </p>
+          ) : null}
 
-        <button type="submit" className="btn btn-secondary btn-block" disabled={busy !== null}>
-          {busy === 'agregar' ? 'Agregando…' : 'Agregar pago'}
-        </button>
-      </form>
+          <button type="submit" className="btn btn-primary btn-block" disabled={busy !== null}>
+            {busy === 'agregar' ? 'Agregando…' : 'Agregar pago'}
+          </button>
+        </form>
+      ) : null}
 
-      <div className="parts">
-        <h3>Partes de pago</h3>
-        {parts.length === 0 ? (
-          <p className="muted">Agregue una o varias partes y confírmelas manualmente.</p>
-        ) : (
+      {parts.length > 0 ? (
+        <div className="parts">
+          <h3>Pagos</h3>
           <ul className="parts-list">
             {parts.map((part) => (
               <li key={part.id} className="part-line">
                 <div className="part-info">
                   <strong>{METHOD_LABEL[part.metodo] ?? part.metodo}</strong>
-                  <span>{formatBs(part.monto_bs)}</span>
+                  <span>Cubierto: {formatBs(part.monto_bs)}</span>
+                  {part.metodo === 'efectivo' && part.recibido_bs ? (
+                    <span className="muted">Recibido: {formatBs(part.recibido_bs)}</span>
+                  ) : null}
                   <span className={`status status-${part.estado}`}>{part.estado}</span>
                   {part.cambio_bs > 0 ? (
                     <span className="change">Cambio: {formatBs(part.cambio_bs)}</span>
                   ) : null}
-                  {part.referencia ? <span className="muted">Ref. {part.referencia}</span> : null}
                 </div>
                 {part.estado !== 'confirmado' ? (
                   <button
@@ -191,8 +215,65 @@ export function PaymentPanel({
               </li>
             ))}
           </ul>
-        )}
-      </div>
+
+          {!showSecondary && parts.length === 1 && parts[0].estado === 'confirmado' && missing > 0 ? (
+            <button type="button" className="btn btn-secondary btn-block" onClick={startSecondary}>
+              + Agregar método secundario
+            </button>
+          ) : null}
+
+          {showSecondary && missing > 0 ? (
+            <form className="payment-form secondary" onSubmit={(event) => void handleAddSecondary(event)}>
+              <h4>Método secundario</h4>
+              <p className="muted">Falta por pagar: {formatBs(missing)}</p>
+              <div className="field">
+                <label htmlFor="metodo-sec">Método</label>
+                <select
+                  id="metodo-sec"
+                  value={metodoSec}
+                  onChange={(event) => setMetodoSec(event.target.value as MetodoPago)}
+                >
+                  <option value="qr">QR</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="efectivo">Efectivo</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="monto-sec">Monto a cubrir (Bs)</label>
+                <input
+                  id="monto-sec"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={montoSec}
+                  onChange={(event) => setMontoSec(event.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+              {metodoSec === 'efectivo' ? (
+                <div className="field">
+                  <label htmlFor="recibido-sec">Efectivo recibido (Bs)</label>
+                  <input
+                    id="recibido-sec"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={recibidoSec}
+                    onChange={(event) => setRecibidoSec(event.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+              ) : null}
+              {localError ? (
+                <p className="form-error" role="alert">
+                  {localError}
+                </p>
+              ) : null}
+              <button type="submit" className="btn btn-secondary btn-block" disabled={busy !== null}>
+                {busy === 'agregar' ? 'Agregando…' : 'Agregar método secundario'}
+              </button>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="payment-summary">
         <div className="total-row">
@@ -207,9 +288,9 @@ export function PaymentPanel({
           <p className="form-error" role="alert">
             Los pagos exceden el total por {formatBs(-missing)}.
           </p>
-        ) : (
+        ) : confirmedTotal > 0 ? (
           <p className="ok-text">La suma de pagos coincide con el total.</p>
-        )}
+        ) : null}
         <button
           type="button"
           className="btn btn-primary btn-block"
@@ -226,4 +307,12 @@ export function PaymentPanel({
       </div>
     </section>
   )
+}
+
+function parseBsSafe(value: string): number {
+  try {
+    return parseBs(value)
+  } catch {
+    return 0
+  }
 }

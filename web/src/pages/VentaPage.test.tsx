@@ -124,7 +124,7 @@ describe('pantalla de venta', () => {
     expect(await screen.findByText(/No hay caja abierta/)).toBeInTheDocument()
   })
 
-  it('exige confirmar cada parte y que la suma coincida con el total', async () => {
+  it('permite completar con un solo método o agregar método secundario', async () => {
     const user = userEvent.setup()
     let partId = 0
     const montos = new Map<number, number>()
@@ -156,7 +156,7 @@ describe('pantalla de venta', () => {
             return jsonResponse(
               partFixture({
                 id,
-                metodo: 'tarjeta',
+                metodo: montos.get(id) === 123456 ? 'tarjeta' : 'efectivo',
                 monto_bs: montos.get(id) ?? 0,
                 estado: 'confirmado',
               }),
@@ -168,22 +168,14 @@ describe('pantalla de venta', () => {
     renderVenta()
     await addCafeAndCheckout(user)
 
+    // Pago único
     await user.selectOptions(screen.getByLabelText('Método de pago'), 'tarjeta')
-    await user.type(screen.getByLabelText('Monto de la parte (Bs)'), '1000')
     await user.click(screen.getByRole('button', { name: 'Agregar pago' }))
 
     const firstPart = (await screen.findAllByText('Tarjeta'))
       .map((element) => element.closest('li'))
       .find((element): element is HTMLLIElement => element !== null) as HTMLElement
     await user.click(within(firstPart).getByRole('button', { name: 'Confirmar' }))
-
-    expect(screen.getByRole('button', { name: 'Completar venta' })).toBeDisabled()
-
-    await user.type(screen.getByLabelText('Monto de la parte (Bs)'), '234,56')
-    await user.click(screen.getByRole('button', { name: 'Agregar pago' }))
-    const pending = screen.getAllByText('pendiente')[0]?.closest('li') as HTMLElement
-    expect(pending).toBeTruthy()
-    await user.click(within(pending).getByRole('button', { name: 'Confirmar' }))
 
     expect(await screen.findByText('La suma de pagos coincide con el total.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Completar venta' })).toBeEnabled()
@@ -210,7 +202,7 @@ describe('pantalla de venta', () => {
               partFixture({
                 metodo: 'efectivo',
                 monto_bs: body.monto_bs,
-                cambio_bs: body.recibido_bs - body.monto_bs,
+                cambio_bs: (body.recibido_bs ?? body.monto_bs) - body.monto_bs,
               }),
               201,
             )
@@ -221,7 +213,6 @@ describe('pantalla de venta', () => {
     renderVenta()
     await addCafeAndCheckout(user)
 
-    await user.type(screen.getByLabelText('Monto de la parte (Bs)'), '1234,56')
     await user.type(screen.getByLabelText('Efectivo recibido (Bs)'), '2000')
     await user.click(screen.getByRole('button', { name: 'Agregar pago' }))
 
@@ -242,7 +233,6 @@ describe('pantalla de venta', () => {
     renderVenta()
     await addCafeAndCheckout(user)
 
-    await user.type(screen.getByLabelText('Monto de la parte (Bs)'), '1234,56')
     await user.type(screen.getByLabelText('Efectivo recibido (Bs)'), '100')
     await user.click(screen.getByRole('button', { name: 'Agregar pago' }))
 
@@ -278,7 +268,6 @@ describe('pantalla de venta', () => {
     renderVenta()
     await addCafeAndCheckout(user)
 
-    await user.type(screen.getByLabelText('Monto de la parte (Bs)'), '1234,56')
     await user.type(screen.getByLabelText('Efectivo recibido (Bs)'), '2000')
     await user.click(screen.getByRole('button', { name: 'Agregar pago' }))
 
@@ -347,7 +336,6 @@ describe('pantalla de venta', () => {
     await addCafeAndCheckout(user)
 
     await user.selectOptions(screen.getByLabelText('Método de pago'), 'tarjeta')
-    await user.type(screen.getByLabelText('Monto de la parte (Bs)'), '1234,56')
     await user.click(screen.getByRole('button', { name: 'Agregar pago' }))
     await user.click(await screen.findByRole('button', { name: 'Confirmar' }))
     await screen.findByText('La suma de pagos coincide con el total.')

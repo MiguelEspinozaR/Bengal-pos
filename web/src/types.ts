@@ -51,6 +51,7 @@ export interface PaymentPart {
   metodo: string
   metodo_nombre?: string
   monto_bs: number
+  recibido_bs?: number
   estado: 'pendiente' | 'confirmado' | string
   referencia?: string
   cambio_bs: number
